@@ -12,6 +12,7 @@ package stathat
 import (
 	"fmt"
 	"http"
+	"io/ioutil"
 	"log"
 	"os"
 	"strconv"
@@ -74,6 +75,7 @@ type testPost struct {
 }
 
 var testPostChannel chan *testPost
+var Verbose = false
 
 func setTesting() {
 	testingEnv = true
@@ -236,6 +238,10 @@ func processStats() {
 	for {
 		sr := <-statReportChannel
 
+                if Verbose {
+                        log.Printf("posting stat to stathat: %s, %v", sr.url(), sr.values())
+                }
+
 		if testingEnv {
 			testPostChannel <- &testPost{sr.url(), sr.values()}
 			continue
@@ -247,8 +253,11 @@ func processStats() {
 			continue
 		}
 
-		// body, _ := ioutil.ReadAll(r.Body)
+                if Verbose {
+                        body, _ := ioutil.ReadAll(r.Body)
+                        log.Printf("stathat post result: %s", body)
+                }
+
 		r.Body.Close()
-		// log.Printf("stathat post result: %s", body)
 	}
 }

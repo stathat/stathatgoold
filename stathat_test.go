@@ -193,6 +193,7 @@ func TestPaths(t *testing.T) {
 
 func TestPosts(t *testing.T) {
 	setTesting()
+        Verbose = true
 	PostCountOne("statkey", "userkey")
 	p := <-testPostChannel
 	if p.url != "http://api.stathat.com/c" {
