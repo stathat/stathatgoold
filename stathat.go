@@ -10,242 +10,245 @@
 package stathat
 
 import (
-        "fmt"
-        "http"
-        "log"
-        "os"
-        "strconv"
-        "url"
+	"fmt"
+	"http"
+	"log"
+	"os"
+	"strconv"
+	"url"
 )
 
 type statKind int
+
 const (
-        _ = iota
-        COUNTER statKind = iota
-        VALUE
+	_                = iota
+	COUNTER statKind = iota
+	VALUE
 )
 
 func (sk statKind) classicPath() string {
-        switch sk {
-        case COUNTER:
-                return "/c"
-        case VALUE:
-                return "/v"
-        }
-        return ""
+	switch sk {
+	case COUNTER:
+		return "/c"
+	case VALUE:
+		return "/v"
+	}
+	return ""
 }
 
 type apiKind int
+
 const (
-        _ = iota
-        CLASSIC apiKind = iota
-        EZ
+	_               = iota
+	CLASSIC apiKind = iota
+	EZ
 )
 
 const hostname = "api.stathat.com"
 
 func (ak apiKind) path(sk statKind) string {
-        switch ak {
-        case EZ:
-                return "/ez"
-        case CLASSIC:
-                return sk.classicPath()
-        }
-        return ""
+	switch ak {
+	case EZ:
+		return "/ez"
+	case CLASSIC:
+		return sk.classicPath()
+	}
+	return ""
 }
 
-
 type statReport struct {
-        StatKey string
-        UserKey string
-        Value float64
-        statType statKind
-        apiType apiKind
+	StatKey  string
+	UserKey  string
+	Value    float64
+	statType statKind
+	apiType  apiKind
 }
 
 var statReportChannel chan *statReport
 
 var testingEnv = false
+
 type testPost struct {
-        url string
-        values url.Values
+	url    string
+	values url.Values
 }
+
 var testPostChannel chan *testPost
 
 func setTesting() {
-        testingEnv = true
-        testPostChannel = make(chan *testPost)
+	testingEnv = true
+	testPostChannel = make(chan *testPost)
 }
 
 func init() {
-        statReportChannel = make(chan *statReport, 100)
-        go processStats()
+	statReportChannel = make(chan *statReport, 100)
+	go processStats()
 }
 
 // Using the classic API, posts a count to a stat.
 func PostCount(statKey, userKey string, count int) os.Error {
-        statReportChannel <- newClassicStatCount(statKey, userKey, count)
-        return nil
+	statReportChannel <- newClassicStatCount(statKey, userKey, count)
+	return nil
 }
 
 // Using the classic API, posts a count of 1 to a stat.
 func PostCountOne(statKey, userKey string) os.Error {
-        return PostCount(statKey, userKey, 1)
+	return PostCount(statKey, userKey, 1)
 }
 
 // Using the classic API, posts a value to a stat.
 func PostValue(statKey, userKey string, value float64) os.Error {
-        statReportChannel <- newClassicStatValue(statKey, userKey, value)
-        return nil
+	statReportChannel <- newClassicStatValue(statKey, userKey, value)
+	return nil
 }
 
 // Using the EZ API, posts a count of 1 to a stat.
 func PostEZCountOne(statName, email string) os.Error {
-        return PostEZCount(statName, email, 1)
+	return PostEZCount(statName, email, 1)
 }
 
 // Using the EZ API, posts a count to a stat.
 func PostEZCount(statName, email string, count int) os.Error {
-        statReportChannel <- newEZStatCount(statName, email, count)
-        return nil
+	statReportChannel <- newEZStatCount(statName, email, count)
+	return nil
 }
 
 // Using the EZ API, posts a value to a stat.
 func PostEZValue(statName, email string, value float64) os.Error {
-        statReportChannel <- newEZStatValue(statName, email, value)
-        return nil
+	statReportChannel <- newEZStatValue(statName, email, value)
+	return nil
 }
 
 func newEZStatCount(statName, email string, count int) *statReport {
-        return &statReport{StatKey: statName,
-        UserKey: email,
-        Value: float64(count),
-        statType: COUNTER,
-        apiType: EZ}
+	return &statReport{StatKey: statName,
+		UserKey:  email,
+		Value:    float64(count),
+		statType: COUNTER,
+		apiType:  EZ}
 }
 
 func newEZStatValue(statName, email string, value float64) *statReport {
-        return &statReport{StatKey: statName,
-        UserKey: email,
-        Value: value,
-        statType: VALUE,
-        apiType: EZ}
+	return &statReport{StatKey: statName,
+		UserKey:  email,
+		Value:    value,
+		statType: VALUE,
+		apiType:  EZ}
 }
 
 func newClassicStatCount(statKey, userKey string, count int) *statReport {
-        return &statReport{StatKey: statKey,
-        UserKey: userKey,
-        Value: float64(count),
-        statType: COUNTER,
-        apiType: CLASSIC}
+	return &statReport{StatKey: statKey,
+		UserKey:  userKey,
+		Value:    float64(count),
+		statType: COUNTER,
+		apiType:  CLASSIC}
 }
 
 func newClassicStatValue(statKey, userKey string, value float64) *statReport {
-        return &statReport{StatKey: statKey,
-        UserKey: userKey,
-        Value: value,
-        statType: VALUE,
-        apiType: CLASSIC}
+	return &statReport{StatKey: statKey,
+		UserKey:  userKey,
+		Value:    value,
+		statType: VALUE,
+		apiType:  CLASSIC}
 }
 
 func (sr *statReport) values() url.Values {
-        switch sr.apiType {
-        case EZ:
-                return sr.ezValues()
-        case CLASSIC:
-                return sr.classicValues()
-        }
+	switch sr.apiType {
+	case EZ:
+		return sr.ezValues()
+	case CLASSIC:
+		return sr.classicValues()
+	}
 
-        return nil
+	return nil
 }
 
 func (sr *statReport) ezValues() url.Values {
-        switch sr.statType {
-        case COUNTER:
-                return sr.ezCounterValues()
-        case VALUE:
-                return sr.ezValueValues()
-        }
-        return nil
+	switch sr.statType {
+	case COUNTER:
+		return sr.ezCounterValues()
+	case VALUE:
+		return sr.ezValueValues()
+	}
+	return nil
 }
 
 func (sr *statReport) classicValues() url.Values {
-        switch sr.statType {
-        case COUNTER:
-                return sr.classicCounterValues()
-        case VALUE:
-                return sr.classicValueValues()
-        }
-        return nil
+	switch sr.statType {
+	case COUNTER:
+		return sr.classicCounterValues()
+	case VALUE:
+		return sr.classicValueValues()
+	}
+	return nil
 }
 
 func (sr *statReport) ezCommonValues() url.Values {
-        result := make(url.Values)
-        result.Set("stat", sr.StatKey)
-        result.Set("email", sr.UserKey)
-        return result
+	result := make(url.Values)
+	result.Set("stat", sr.StatKey)
+	result.Set("email", sr.UserKey)
+	return result
 }
 
 func (sr *statReport) classicCommonValues() url.Values {
-        result := make(url.Values)
-        result.Set("key", sr.StatKey)
-        result.Set("ukey", sr.UserKey)
-        return result
+	result := make(url.Values)
+	result.Set("key", sr.StatKey)
+	result.Set("ukey", sr.UserKey)
+	return result
 }
 
 func (sr *statReport) ezCounterValues() url.Values {
-        result := sr.ezCommonValues()
-        result.Set("count", sr.valueString())
-        return result
+	result := sr.ezCommonValues()
+	result.Set("count", sr.valueString())
+	return result
 }
 
 func (sr *statReport) ezValueValues() url.Values {
-        result := sr.ezCommonValues()
-        result.Set("value", sr.valueString())
-        return result
+	result := sr.ezCommonValues()
+	result.Set("value", sr.valueString())
+	return result
 }
 
 func (sr *statReport) classicCounterValues() url.Values {
-        result := sr.classicCommonValues()
-        result.Set("count", sr.valueString())
-        return result
+	result := sr.classicCommonValues()
+	result.Set("count", sr.valueString())
+	return result
 }
 
 func (sr *statReport) classicValueValues() url.Values {
-        result := sr.classicCommonValues()
-        result.Set("value", sr.valueString())
-        return result
+	result := sr.classicCommonValues()
+	result.Set("value", sr.valueString())
+	return result
 }
 
 func (sr *statReport) valueString() string {
-        return strconv.Ftoa64(sr.Value, 'g', -1)
+	return strconv.Ftoa64(sr.Value, 'g', -1)
 }
 
 func (sr *statReport) path() string {
-        return sr.apiType.path(sr.statType)
+	return sr.apiType.path(sr.statType)
 }
 
 func (sr *statReport) url() string {
-        return fmt.Sprintf("http://%s%s", hostname, sr.path())
+	return fmt.Sprintf("http://%s%s", hostname, sr.path())
 }
 
 func processStats() {
-        for {
-                sr := <-statReportChannel
+	for {
+		sr := <-statReportChannel
 
-                if testingEnv {
-                        testPostChannel <- &testPost{sr.url(), sr.values()}
-                        continue
-                }
+		if testingEnv {
+			testPostChannel <- &testPost{sr.url(), sr.values()}
+			continue
+		}
 
-                r, err := http.PostForm(sr.url(), sr.values())
-                if err != nil {
-                        log.Printf("error posting stat to stathat: %s", err)
-                        continue
-                }
+		r, err := http.PostForm(sr.url(), sr.values())
+		if err != nil {
+			log.Printf("error posting stat to stathat: %s", err)
+			continue
+		}
 
-                // body, _ := ioutil.ReadAll(r.Body)
-                r.Body.Close()
-                // log.Printf("stathat post result: %s", body)
-        }
+		// body, _ := ioutil.ReadAll(r.Body)
+		r.Body.Close()
+		// log.Printf("stathat post result: %s", body)
+	}
 }
