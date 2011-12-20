@@ -16,6 +16,7 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"time"
 	"url"
 )
 
@@ -77,6 +78,8 @@ type testPost struct {
 var testPostChannel chan *testPost
 var Verbose = false
 
+var done chan bool
+
 func setTesting() {
 	testingEnv = true
 	testPostChannel = make(chan *testPost)
@@ -85,6 +88,7 @@ func setTesting() {
 func init() {
 	statReportChannel = make(chan *statReport, 100)
 	go processStats()
+	done = make(chan bool)
 }
 
 // Using the classic API, posts a count to a stat.
@@ -236,7 +240,12 @@ func (sr *statReport) url() string {
 
 func processStats() {
 	for {
-		sr := <-statReportChannel
+		sr, ok := <-statReportChannel
+
+		if !ok {
+			done <- true
+			break
+		}
 
                 if Verbose {
                         log.Printf("posting stat to stathat: %s, %v", sr.url(), sr.values())
@@ -259,5 +268,17 @@ func processStats() {
                 }
 
 		r.Body.Close()
+	}
+}
+
+// Wait for all stats to be sent, or until the timeout in nanoseconds. Useful
+// for simple command-line apps to defer a call to this in main()
+func WaitForClose(timeout int64) bool {
+	close(statReportChannel)
+	select {
+	case <-done:
+		return true
+	case <-time.After(timeout):
+		return false
 	}
 }
